@@ -274,7 +274,7 @@ class Synth:
                 +
                 np.cumsum(
                     freqs
-                    * 1.003
+                    * 1.0005
                     / self.samplerate
                 )
             )

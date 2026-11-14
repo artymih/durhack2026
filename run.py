@@ -153,6 +153,18 @@ def main():
                     1,
                 )
 
+                y += 20
+                
+                cv2.putText(
+                    frame,
+                    f"R vibrato={right.roll:.2f}",
+                    (10, y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    1,
+                )
+
             # ----------------------------------
             # Draw hand landmarks
             # ----------------------------------
