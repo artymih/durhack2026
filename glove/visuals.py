@@ -20,7 +20,7 @@ TODO: class Visuals: draw(frame, hands, info, dt) -> frame, save_score(path)
 
 import cv2
 import numpy as np
-from tracker import HandTracker
+from hands import HandState
 from music import degree_to_midi, midi_to_name
 
 skeleton_pairs = [(0,1),(1,2),(2,3),(3,4),(0,5),(5,6),(6,7),(7,8),(5,9),(9,10),(10,11),(11,12),
@@ -77,7 +77,7 @@ def draw_glowing_orb(frame, orb_point, current_note):
     return frame
 
 if __name__ == "__main__":
-    tracker = HandTracker()
+    tracker = HandState()
     orb_canvas = None
 
     try:
