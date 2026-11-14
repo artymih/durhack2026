@@ -20,3 +20,21 @@ Tips: cv2.GaussianBlur on a copy of the overlay, then add it back = cheap glow. 
 
 TODO: class Visuals: draw(frame, hands, info, dt) -> frame, save_score(path)
 """
+
+import cv2
+
+Webcam = cv2.VideoCapture(0)
+
+if not Webcam.isOpened():
+    print("Could not access webcam.")
+
+ret, frame = Webcam.read()
+
+if ret:
+    cv2.imshow("Captured Frame", frame)
+    cv2.waitKey(0)
+    cv2.destoryAllWindows()
+else:
+    print("Could not capture frame.")
+
+Webcam.release()
