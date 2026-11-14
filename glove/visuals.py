@@ -20,8 +20,8 @@ TODO: class Visuals: draw(frame, hands, info, dt) -> frame, save_score(path)
 
 import cv2
 import numpy as np
-from hands import HandState
-from music import degree_to_midi, midi_to_name
+from glove.hands import HandState
+from glove.music import degree_to_midi, midi_to_name
 
 skeleton_pairs = [(0,1),(1,2),(2,3),(3,4),(0,5),(5,6),(6,7),(7,8),(5,9),(9,10),(10,11),(11,12),
              (9,13),(13,14),(14,15),(15,16),(13,17),(0,17),(17,18),(18,19),(19,20)]
@@ -62,19 +62,19 @@ def draw_hand_skeleton(frame, points, current_note):
 
     return frame
 
-def draw_glowing_orb(frame, orb_point, current_note):
+# def draw_glowing_orb(frame, orb_point, current_note):
 
-    orb_colour = note_colours[current_note]
+#     orb_colour = note_colours[current_note]
 
-    glow_layer = np.zeros_like(frame)
-    cv2.circle(glow_layer, orb_point, 45, orb_colour, -1)
-    glow_layer = cv2.GaussianBlur(glow_layer, (91, 91), 0)
+#     glow_layer = np.zeros_like(frame)
+#     cv2.circle(glow_layer, orb_point, 45, orb_colour, -1)
+#     glow_layer = cv2.GaussianBlur(glow_layer, (91, 91), 0)
 
-    frame = cv2.add(frame, glow_layer)
-    cv2.circle(frame, orb_point, 12, orb_colour, -1)
-    cv2.circle(frame, orb_point, 6, (255, 255, 255), -1)
+#     frame = cv2.add(frame, glow_layer)
+#     cv2.circle(frame, orb_point, 12, orb_colour, -1)
+#     cv2.circle(frame, orb_point, 6, (255, 255, 255), -1)
 
-    return frame
+#     return frame
 
 if __name__ == "__main__":
     tracker = HandState()
@@ -86,8 +86,8 @@ if __name__ == "__main__":
             if frame is None:
                 continue
 
-            if orb_canvas is None:
-                orb_canvas = np.zeros_like(frame)
+            # if orb_canvas is None:
+            #     orb_canvas = np.zeros_like(frame)
 
             display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
 
@@ -98,21 +98,21 @@ if __name__ == "__main__":
                 current_note = midi_to_name(degree_to_midi(degree))
                 # Get orb point ... orb_point = 
 
-                display_frame = draw_glowing_orb(display_frame, points, current_note)
-                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
+                # display_frame = draw_glowing_orb(display_frame, points, current_note)
+                # orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
                 display_frame = draw_hand_skeleton(display_frame, points, current_note)
 
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('s'):
-                    cv2.imwrite("orb_artwork.png", orb_canvas)
-                    print("Saved orb_artwork.png!")
-                elif key == ord('c'):
-                    orb_canvas = np.zeros_like(frame)
-                elif key == ord('q'):
-                    break
+                # key = cv2.waitKey(1) & 0xFF
+                # if key == ord('s'):
+                #     cv2.imwrite("orb_artwork.png", orb_canvas)
+                #     print("Saved orb_artwork.png!")
+                # elif key == ord('c'):
+                #     orb_canvas = np.zeros_like(frame)
+                # elif key == ord('q'):
+                #     break
     finally:
-        if orb_canvas is not None:
-            cv2.imwrite("orb_artwork.png", orb_canvas)
-            print("Final artwork saved to orb_artwork.png")
+        # if orb_canvas is not None:
+        #     cv2.imwrite("orb_artwork.png", orb_canvas)
+        #     print("Final artwork saved to orb_artwork.png")
         tracker.close()
         cv2.destroyAllWindows()
