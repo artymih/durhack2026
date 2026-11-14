@@ -1,57 +1,91 @@
-import time
 import cv2
 import numpy as np
 
 from glove.tracker import HandTracker
-from glove.hands import HandsModel
-from glove.visuals import (
-    draw_hand_skeleton,
-    #draw_glowing_orb,
-)
 
 
-NOTE_NAMES = [
-    "C", "C#", "D", "D#",
-    "E", "F", "F#",
-    "G", "G#", "A",
-    "A#", "B"
-]
+NOTE_COLOURS = {
+    "C":  (0, 0, 255),
+    "C#": (0, 85, 255),
+    "D":  (0, 165, 255),
+    "D#": (0, 215, 255),
+    "E":  (0, 255, 255),
+    "F":  (0, 255, 128),
+    "F#": (0, 255, 0),
+    "G":  (255, 255, 0),
+    "G#": (255, 150, 0),
+    "A":  (255, 0, 0),
+    "A#": (255, 0, 140),
+    "B":  (255, 0, 255),
+}
+
+NOTE_NAMES = list(NOTE_COLOURS.keys())
+
+
+def draw_glowing_orb(frame, orb_point, current_note):
+
+    colour = NOTE_COLOURS.get(
+        current_note,
+        (120, 120, 120),
+    )
+
+    glow = np.zeros_like(frame)
+
+    cv2.circle(
+        glow,
+        orb_point,
+        45,
+        colour,
+        -1,
+    )
+
+    glow = cv2.GaussianBlur(
+        glow,
+        (91, 91),
+        0,
+    )
+
+    cv2.add(
+        frame,
+        glow,
+        dst=frame,
+    )
+
+    cv2.circle(
+        frame,
+        orb_point,
+        12,
+        colour,
+        -1,
+    )
+
+    cv2.circle(
+        frame,
+        orb_point,
+        6,
+        (255, 255, 255),
+        -1,
+    )
 
 
 tracker = HandTracker()
-hands_model = HandsModel()
 
-trail = None
+orb_canvas = None
 
 try:
 
     while True:
 
-        frame, raw_hands = tracker.read()
+        frame, hands = tracker.read()
 
         if frame is None:
             continue
 
         h, w = frame.shape[:2]
 
-        hands_model.aspect = w / h
+        if orb_canvas is None:
 
-        states = hands_model.update(
-            raw_hands,
-            time.monotonic()
-        )
-
-        if trail is None:
-            trail = frame.copy()
-            trail[:] = 0
-
-        trail = cv2.addWeighted(
-            trail,
-            0.95,
-            np.zeros_like(trail),
-            0.05,
-            0,
-        )
+            orb_canvas = np.zeros_like(frame)
 
         display = cv2.convertScaleAbs(
             frame,
@@ -59,54 +93,43 @@ try:
             beta=0,
         )
 
-        for hand in raw_hands:
+        for hand in hands:
 
-            role = hand.label.lower()
+            palm = hand.landmarks[[0, 5, 9, 13, 17]]
 
-            state = states.get(role)
+            px = int(
+                palm[:, 0].mean() * w
+            )
 
-            if state is None:
-                continue
+            py = int(
+                palm[:, 1].mean() * h
+            )
 
-            points = [
-                (
-                    int(x * w),
-                    int(y * h),
-                )
-                for x, y, z in hand.landmarks
-            ]
+            orb_point = (px, py)
 
             note = NOTE_NAMES[
-                int(state.x * 12) % 12
+                min(
+                    int(px / w * 12),
+                    11,
+                )
             ]
 
-            orb_point = points[9]
-
-            draw_hand_skeleton(
+            draw_glowing_orb(
                 display,
-                points,
+                orb_point,
                 note,
             )
 
-            # draw_glowing_orb(
-            #     display,
-            #     orb_point,
-            #     note,
-            # )
-
-            # draw_glowing_orb(
-            #     trail,
-            #     orb_point,
-            #     note,
-            # )
+            draw_glowing_orb(
+                orb_canvas,
+                orb_point,
+                note,
+            )
 
             cv2.putText(
                 display,
-                role,
-                (
-                    orb_point[0],
-                    orb_point[1] - 20,
-                ),
+                hand.label,
+                (px + 20, py),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
                 (255, 255, 255),
@@ -116,13 +139,13 @@ try:
         output = cv2.addWeighted(
             display,
             1.0,
-            trail,
-            0.5,
+            orb_canvas,
+            0.3,
             0,
         )
 
         cv2.imshow(
-            "Visual Test",
+            "Orb Visual Test",
             output,
         )
 
@@ -131,20 +154,20 @@ try:
         if key == ord("s"):
 
             cv2.imwrite(
-                "visual_artwork.png",
-                trail,
+                "orb_artwork.png",
+                orb_canvas,
             )
 
             print(
-                "Saved visual_artwork.png"
+                "Saved orb_artwork.png"
             )
 
         elif key == ord("c"):
 
-            trail[:] = 0
+            orb_canvas[:] = 0
 
             print(
-                "Trail cleared"
+                "Canvas cleared"
             )
 
         elif key == ord("q"):
@@ -152,6 +175,17 @@ try:
             break
 
 finally:
+
+    if orb_canvas is not None:
+
+        cv2.imwrite(
+            "orb_artwork.png",
+            orb_canvas,
+        )
+
+        print(
+            "Final artwork saved"
+        )
 
     tracker.close()
     cv2.destroyAllWindows()

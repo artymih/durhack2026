@@ -16,7 +16,7 @@ TODO:
 CONFIG = {
     # arty C
     "music": {
-        "root_midi": 57,                  # A3. Change this to change the key of the whole instrument
+        "root_midi": 33,                  # A3. Change this to change the key of the whole instrument
         "lead_scale": "minor_pentatonic", # name of a scale in music.SCALES
         "lead_octaves": 2,                # how many octaves the right hand's left-to-right sweep covers
         "lead_root_offset": 12,           # lead plays this many semitones above the root (12 = one octave up)
