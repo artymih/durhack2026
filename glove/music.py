@@ -28,9 +28,11 @@ def degree_to_midi(scale, degree, root_midi):
     return root_midi + 12 * octave + scale[index]
 
 CHORD_COLORS = {
-    "triad": [0, 2, 4],
+    "power": [0, 4],
     "sus2": [0, 1, 4],
+    "triad": [0, 2, 4],
     "add7": [0, 2, 4, 6],
+    "add9": [0, 2, 4, 6, 8],
 }
 
 # Left-hand finger count -> chord root degree in natural minor (Am F C G Dm in A). 0 fingers = silence.
@@ -62,3 +64,9 @@ def midi_to_name(m):
     """MIDI note number -> label for the screen, e.g. 69 -> 'A4'."""
     m = round(m)  # the lead can be a fractional note when quantize is off
     return NOTE_NAMES[m % 12] + str(m // 12 - 1)
+
+def chord_notes(scale, root_midi, colour):
+    return [
+        degree_to_midi(scale, d, root_midi)
+        for d in CHORD_COLORS[colour]
+    ]

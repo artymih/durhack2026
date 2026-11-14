@@ -4,6 +4,7 @@ from glove.music import (
     degree_to_midi,
     midi_to_name,
     quantize_cell,
+    CHORD_COLORS,
 )
 
 
@@ -120,28 +121,37 @@ class Instrument:
             # Roll -> vibrato
             # ------------------------------------------
 
+            roll = getattr(
+                right,
+                "roll",
+                0.0,
+            )
+
+            DEAD_ZONE = 15.0
+
+            amount = max(
+                0.0,
+                abs(roll) - DEAD_ZONE,
+            )
+
             vibrato = min(
-                abs(
-                    getattr(
-                        right,
-                        "roll",
-                        0.0,
-                    )
-                ) * 20.0,
-                20.0,
+                amount * 0.2,
+                12.0,
             )
 
             # ------------------------------------------
             # Depth -> reverb
             # ------------------------------------------
 
+            depth = getattr(
+                right,
+                "depth",
+                0.0,
+            )
+
             reverb = min(
                 max(
-                    getattr(
-                        right,
-                        "depth",
-                        0.0,
-                    ),
+                    (depth - 0.15) / 0.45,
                     0.0,
                 ),
                 1.0,
@@ -201,101 +211,63 @@ class Instrument:
             # Chord colour
             # ------------------------------------------
 
-            if roll < -0.3:
+            if roll < -60:
+                chord_name = "power"
 
+            elif roll < -20:
                 chord_name = "sus2"
 
-                degrees = [
-                    0,  # root
-                    1,  # 2nd
-                    4,  # 5th
-                    6,  # 7th
-                    8,  # 9th
-                ]
+            elif roll < 20:
+                chord_name = "triad"
 
-            elif roll > 0.3:
-
-                chord_name = "major"
-
-                degrees = [
-                    0,  # root
-                    2,  # 3rd
-                    4,  # 5th
-                    6,  # 7th
-                    8,  # 9th
-                ]
+            elif roll < 60:
+                chord_name = "add7"
 
             else:
+                chord_name = "add9"
 
-                chord_name = "minor"
-
-                degrees = [
-                    0,  # root
-                    2,  # scale 3rd
-                    4,  # 5th
-                    6,  # 7th
-                    8,  # 9th
-                ]
+            degrees = CHORD_COLORS[chord_name]
 
             notes = []
 
-            if getattr(left, "thumb", False):
-                notes.append(
-                    degree_to_midi(
-                        scale,
-                        degrees[0],
-                        root,
-                    )
-                )
+            finger_states = [
+                getattr(left, "thumb", False),
+                getattr(left, "index", False),
+                getattr(left, "middle", False),
+                getattr(left, "ring", False),
+                getattr(left, "pinky", False),
+            ]
 
-            if getattr(left, "index", False):
-                notes.append(
-                    degree_to_midi(
-                        scale,
-                        degrees[1],
-                        root,
-                    )
-                )
+            for finger_on, degree in zip(
+                finger_states,
+                degrees,
+            ):
 
-            if getattr(left, "middle", False):
-                notes.append(
-                    degree_to_midi(
-                        scale,
-                        degrees[2],
-                        root,
-                    )
-                )
+                if finger_on:
 
-            if getattr(left, "ring", False):
-                notes.append(
-                    degree_to_midi(
-                        scale,
-                        degrees[3],
-                        root,
+                    notes.append(
+                        degree_to_midi(
+                            scale,
+                            degree,
+                            root+36,
+                        )
                     )
-                )
-
-            if getattr(left, "pinky", False):
-                notes.append(
-                    degree_to_midi(
-                        scale,
-                        degrees[4],
-                        root,
-                    )
-                )
 
             # ------------------------------------------
             # Y -> volume
-            # top = loud
-            # bottom = quiet
+            # range 0.5 -> 1.0
             # ------------------------------------------
 
-            volume = min(
-                max(
-                    1.0 - left.y,
-                    0.0,
-                ),
-                1.0,
+            volume = (
+                0.5
+                + 0.5
+                * min(
+                    max(
+                        1.0 - left.y,
+                        0.0,
+                    ),
+                    1.0,
+                )
             )
 
             if notes:
