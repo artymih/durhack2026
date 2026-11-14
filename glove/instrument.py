@@ -26,3 +26,10 @@ TODO:
 - next_mode(), toggle_quantize(), transpose(semitones), panic() (silence everything)
 - gesture to switch mode so nobody touches the keyboard on stage (e.g. both hands fist for 1 s)
 """
+
+from glove.config import CONFIG
+m = CONFIG["music"]
+scale = SCALES[m["lead_scale"]]
+cells = len(scale) * m["lead_octaves"] + 1   # 5 notes x 2 octaves + the top root = 11 zones
+
+

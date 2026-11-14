@@ -25,8 +25,8 @@ CONFIG = {
     },
     # megan A
     "camera": {},
-    "model_path": "",
+    "model_path": "models/hand_landmarker.task",
     "swap_hand": False,
     # amelka B
-    "audio": {}
+    "audio": {"samplerate": 44100, "blocksize": 256}
 }  
