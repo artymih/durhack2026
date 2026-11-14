@@ -22,12 +22,12 @@ def draw_glowing_orb(frame, orb_point, current_note, intensity=1.0):
     orb_colour = note_colours.get(current_note, (120, 120, 120))
 
     glow_layer = np.zeros_like(frame)
-    cv2.circle(glow_layer, orb_point, 45, orb_colour, -1)
-    glow_layer = cv2.GaussianBlur(glow_layer, (91, 91), 0)
+    cv2.circle(glow_layer, orb_point, 30, orb_colour, -1)
+    glow_layer = cv2.GaussianBlur(glow_layer, (51, 51), 0)
 
     glow_layer = cv2.convertScaleAbs(glow_layer, alpha=intensity, beta=0)
     frame = cv2.add(frame, glow_layer)
-    cv2.circle(frame, orb_point, 12, orb_colour, -1)
+    cv2.circle(frame, orb_point, 6, orb_colour, -1)
 
     return frame
 
@@ -50,19 +50,20 @@ if __name__ == "__main__":
             orb_canvas = cv2.multiply(orb_canvas, 0.90)
 
             display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
-
+            height, width, _ = frame.shape
             for hand, degree in hands:
                 current_note = midi_to_name(degree_to_midi(degree))
                 
-                height, width, _ = frame.shape
-                orb_point = []
-                for x, y in hand.palm:
-                    orb_point = (int(x * width), int(y * height))
-                    orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
-                    artwork_canvas = draw_glowing_orb(artwork_canvas, orb_point, current_note)
+                palm_pts = hand.palm
+                if len(palm_pts) > 0:
+                    avg_x = sum(pt[0] for pt in palm_pts) / len(palm_pts)
+                    avg_y = sum(pt[1] for pt in palm_pts) / len(palm_pts)
+                    orb_point = (int(avg_x * width), int(avg_y * height))
 
+                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
+                artwork_canvas = draw_glowing_orb(artwork_canvas, orb_point, current_note)
             display_frame = cv2.add(display_frame, orb_canvas)
-
+           
             cv2.imshow("Hand Orb Tracker", display_frame)
 
             key = cv2.waitKey(1) & 0xFF
