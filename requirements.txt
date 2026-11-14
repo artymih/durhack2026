@@ -1,0 +1,5 @@
+mediapipe
+numpy
+scipy
+sounddevice
+# Do NOT pip install opencv-python: mediapipe already pulls in opencv-contrib-python and the two conflict.
