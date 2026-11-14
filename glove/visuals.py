@@ -78,12 +78,16 @@ def draw_glowing_orb(frame, orb_point, current_note):
 
 if __name__ == "__main__":
     tracker = HandTracker()
+    orb_canvas = None
 
     try:
         while True:
             frame, hands = tracker.read()
             if frame is None:
                 continue
+
+            if orb_canvas is None:
+                orb_canvas = np.zeros_like(frame)
 
             display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
 
@@ -92,13 +96,23 @@ if __name__ == "__main__":
                 points = get_points(display_frame, hand.landmarks)
 
                 current_note = midi_to_name(degree_to_midi(degree))
+                # Get orb point ... orb_point = 
 
                 display_frame = draw_glowing_orb(display_frame, points, current_note)
+                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
                 display_frame = draw_hand_skeleton(display_frame, points, current_note)
 
-            cv2.imshow("Hand Skeleton Tracker", display_frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('s'):
+                    cv2.imwrite("orb_artwork.png", orb_canvas)
+                    print("Saved orb_artwork.png!")
+                elif key == ord('c'):
+                    orb_canvas = np.zeros_like(frame)
+                elif key == ord('q'):
+                    break
     finally:
+        if orb_canvas is not None:
+            cv2.imwrite("orb_artwork.png", orb_canvas)
+            print("Final artwork saved to orb_artwork.png")
         tracker.close()
         cv2.destroyAllWindows()
