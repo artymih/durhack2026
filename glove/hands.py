@@ -14,7 +14,7 @@ class HandState:
     roll: float = 0.0         # radians, hand tilt. 0 = fingers up, + = clockwise
     twist: float = 0.0        # -1..1, + = palm toward camera, - = back of hand
     openness: float = 1.0     # 0 = fist, 1 = open hand
-    fingers: int = 5          # stable finger count 0..5
+    fingers_up: tuple[bool, bool, bool, bool, bool] = (False,) * 5
     pinch: float = 0.0        # 0..1, thumb to index tip
     vx: float = 0.0           # velocity, frame-heights per second
     vy: float = 0.0           # + = moving down
