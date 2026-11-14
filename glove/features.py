@@ -17,6 +17,17 @@ Formulas to start from (estimates, TUNE them on a real hand with the debug HUD):
 - twist (palm vs back): sign of the 2D cross product wrist->index knuckle x wrist->pinky knuckle,
                        flipped for the Left hand. Check the sign on a real hand; it may be backwards.
 
+ACTUAL DICT:
+            {'palm_centre': (x, y),
+            'cam_distance': int,
+            'roll': int (degrees),
+            'curl': arr[4] int (0-1),
+            'thumb_open': int (0-1),
+            'openness': int (0-1),
+            'fingers_up': arr[4] int ,
+            'pinch': int (0-1)}
+
+
 TODO:
 - def extract_features(landmarks, world, label, aspect) -> dict with the fields above
 - (optional) palm normal from world landmarks, finger spread, thumb-to-each-fingertip pinches
