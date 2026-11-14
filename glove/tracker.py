@@ -30,7 +30,7 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks.python import vision, BaseOptions
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import numpy as np
 from pathlib import Path
 
@@ -85,38 +85,84 @@ class HandTracker:
           ))
       return frame, hands
 
-      # h, w = frame.shape[:2]
-      # for i, hand in enumerate(result.hand_landmarks):
-      #     label = result.handedness[i][0].category_name
-      #     if self.SWAP_HANDEDNESS:
-      #       label = "Left" if label == "Right" else "Right"
-      #     cv2.putText(frame, label, (int(hand[0].x * w), int(hand[0].y * h)), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-      #     for lm in hand:
-      #       px = int(lm.x * w)
-      #       py = int(lm.y * h)
-      #       cv2.circle(frame, (px, py), 4, (0, 255, 0), -1)
-      
-      # if cv2.waitKey(1) & 0xFF == ord("q"):  # quit when you press q
-      #     self.close()
-
-      # cv2.imshow("camera", frame)
-
     def close(self):
         self.cap.release()
         # cv2.destroyAllWindows()
         self.landmarker.close()
 
+# def draw_hud(frame, feats, x, y):
+#     for key, value in feats.items():
+#         if isinstance(value, (list, tuple, np.ndarray)):
+#             parts = []
+#             for v in value:
+#                 if isinstance(v, (bool, np.bool_)):
+#                     parts.append("T" if v else "F")
+#                 elif isinstance(v, (float, np.floating)):
+#                     parts.append(f"{v:.2f}")
+#                 else:
+#                     parts.append(str(v))
+#             text = f"{key}: " + " ".join(parts)
+#         elif isinstance(value, (float, np.floating)):
+#             text = f"{key}: {value:.2f}"
+#         else:
+#             text = f"{key}: {value}"
+#         cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#         y += 20
+
+def draw_states(frame, states, w):
+    for role, state in states.items():
+        x = 10 if role == "left" else w - 220
+        y = 30
+        cv2.putText(frame, role.upper(), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        y += 22
+        if state is None:
+            cv2.putText(frame, "none", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+            continue
+        for key, value in asdict(state).items():
+            if key == "landmarks":
+                continue
+            if isinstance(value, bool):
+                text = f"{key}: {value}"
+            elif isinstance(value, float):
+                text = f"{key}: {value:.2f}"
+            elif isinstance(value, tuple):
+                text = f"{key}: " + " ".join("T" if v else "F" for v in value)
+            else:
+                text = f"{key}: {value}"
+            cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+            y += 18
+
 if __name__ == "__main__":
-    if not Path("models/hand_landmarker.task").exists():
+    from config import CONFIG
+    from features import extract_features
+    from hands import HandsModel        # or: from glove.hands import HandsModel
+    tracker = HandTracker()
+    model = HandsModel()                # aspect defaults to 4/3, see step 2
+
+    if not Path(CONFIG["model_path"]).exists():
       raise FileNotFoundError("Mate you gotta run this command: python scripts/download_model.py")
 
     tracker = HandTracker()
+    latest = {}
+
     while True:
         frame, hands = tracker.read()
         if frame is None:
             continue
         h, w = frame.shape[:2]
+        model.aspect = w / h
+        states = model.update(hands, time.monotonic())
+
         for hand in hands:
+            feats = extract_features(hand.landmarks, hand.world, hand.label, w / h)
+            latest[hand.label] = feats
+            x, y = feats['palm_centre']
+            cv2.circle(frame, (int(x*w), int(y*h)), 8, (255, 0, 0), -1)
+            
+            x = 10 if hand.label == "Left" else w - 200
+            # draw_hud(frame, feats, x, 30)
+            draw_states(frame, states, w)
+
             for x, y, z in hand.landmarks:
                 px = int(x * w)
                 py = int(y * h)
@@ -124,11 +170,11 @@ if __name__ == "__main__":
                 wx = int(hand.landmarks[0][0] * w)
                 wy = int(hand.landmarks[0][1] * h)
                 cv2.putText(frame, hand.label, (wx, wy), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-      #     for lm in hand:
-            # draw the dots, using: for x, y, z in hand.landmarks
-            # draw the label near the wrist, hand.landmarks[0]
         cv2.imshow("camera", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
             break
+        if key == ord("p"):
+            print(latest)
     tracker.close()
     cv2.destroyAllWindows()
