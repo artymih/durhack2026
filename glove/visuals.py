@@ -19,10 +19,9 @@ TODO: class Visuals: draw(frame, hands, info, dt) -> frame, save_score(path)
 """
 
 import cv2
-#from tracker import frames etc
-
-#maybe define hands_data depending on input from megan
-#This code hinges on getting an input of frame, landmarks, label from megan's code, and getting a current_note from amelkas code
+import numpy as np
+from hands import HandState
+from music import degree_to_midi, midi_to_name
 
 skeleton_pairs = [(0,1),(1,2),(2,3),(3,4),(0,5),(5,6),(6,7),(7,8),(5,9),(9,10),(10,11),(11,12),
              (9,13),(13,14),(14,15),(15,16),(13,17),(0,17),(17,18),(18,19),(19,20)]
@@ -42,18 +41,17 @@ note_colours = {
     "B":  (255, 0, 255)
 }
 
-def draw_hand_skeleton(frame, landmarks, label, current_note):
-    colour = note_colours.get(current_note)
-    if not landmarks:
-        return frame
+def get_points(frame, landmarks):
     height, width, _ = frame.shape
-    colour = hand_colours.get(label, (0,255,0))
     points = []
-    for x,y in landmarks:
-        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
-            points.append((int(x * width), int(y * height)))
-        else:
-            points.append((int(x), int(y)))
+    for x, y in landmarks:
+        points.append((int(x * width), int(y * height)))
+    return points
+
+def draw_hand_skeleton(frame, points, current_note):
+    if len(points) == 0:
+        return frame
+    colour = note_colours.get(current_note, (120,120,120))
 
     for start_idx, end_idx in skeleton_pairs:
         cv2.line(frame, points[start_idx], points[end_idx], colour, 2)
@@ -63,18 +61,58 @@ def draw_hand_skeleton(frame, landmarks, label, current_note):
         cv2.circle(frame, pt, 2, (255, 255, 255), -1)
 
     return frame
-    
 
-for frame, hands_data in '''[function name from megans code]''' :
-    display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
-    
-    for hand in hands_data:
-        # SOME WAY TO GET CURRENT NOTE FROM AMELKAS CODE
-        side = hand["label"]            
-        points = hand["landmarks"]
-        display_frame = draw_hand_skeleton(display_frame, points, side, current_note)
-    cv2.imshow("Hand Skeleton Tracker", display_frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+def draw_glowing_orb(frame, orb_point, current_note):
 
-cv2.destroyAllWindows()
+    orb_colour = note_colours[current_note]
+
+    glow_layer = np.zeros_like(frame)
+    cv2.circle(glow_layer, orb_point, 45, orb_colour, -1)
+    glow_layer = cv2.GaussianBlur(glow_layer, (91, 91), 0)
+
+    frame = cv2.add(frame, glow_layer)
+    cv2.circle(frame, orb_point, 12, orb_colour, -1)
+    cv2.circle(frame, orb_point, 6, (255, 255, 255), -1)
+
+    return frame
+
+if __name__ == "__main__":
+    tracker = HandState()
+    orb_canvas = None
+
+    try:
+        while True:
+            frame, hands = tracker.read()
+            if frame is None:
+                continue
+
+            if orb_canvas is None:
+                orb_canvas = np.zeros_like(frame)
+
+            display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
+
+            for hand, degree in hands:
+                side = hand.label
+                points = get_points(display_frame, hand.landmarks)
+
+                current_note = midi_to_name(degree_to_midi(degree))
+                # Get orb point ... orb_point = 
+
+                display_frame = draw_glowing_orb(display_frame, points, current_note)
+                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
+                display_frame = draw_hand_skeleton(display_frame, points, current_note)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('s'):
+                    cv2.imwrite("orb_artwork.png", orb_canvas)
+                    print("Saved orb_artwork.png!")
+                elif key == ord('c'):
+                    orb_canvas = np.zeros_like(frame)
+                elif key == ord('q'):
+                    break
+    finally:
+        if orb_canvas is not None:
+            cv2.imwrite("orb_artwork.png", orb_canvas)
+            print("Final artwork saved to orb_artwork.png")
+        tracker.close()
+        cv2.destroyAllWindows()
