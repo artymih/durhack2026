@@ -13,4 +13,15 @@ TODO:
 - audio: samplerate 44100, blocksize 256
 """
 
-CONFIG = {}  # TODO: replace with a dataclass once the settings above are settled
+CONFIG = {
+    # arty C
+    "music": {
+
+    },
+    # megan A
+    "camera": {},
+    "model_path": "",
+    "swap_hand": False,
+    # amelka B
+    "audio": {}
+}  
