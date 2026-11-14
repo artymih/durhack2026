@@ -70,6 +70,7 @@ TODO: class Synth
     drum(kind: str, vel: float)             # "kick" | "snare" | "hat"
     level() -> float                        # current output RMS, so visuals can pulse with the sound
 """
+from config import CONFIG
 
 class Synth:
 
