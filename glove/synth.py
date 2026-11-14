@@ -70,6 +70,7 @@ TODO: class Synth
     drum(kind: str, vel: float)             # "kick" | "snare" | "hat"
     level() -> float                        # current output RMS, so visuals can pulse with the sound
 """
+from config import CONFIG
 
 class Synth:
     def __init__(self):
@@ -81,8 +82,9 @@ class Synth:
         self.reverb_amount = 0.0
         self.delay_amount = 0.0
 
-        self.samplerate = 44100
-        self.blocksize = 256
+        m = CONFIG["audio"]
+        self.samplerate = m["samplerate"]
+        self.blocksize = m["blocksize"]
 
         self.phase = 0.0
         self.current_rms = 0.0
