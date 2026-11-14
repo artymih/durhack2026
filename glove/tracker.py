@@ -106,17 +106,49 @@ class HandTracker:
         # cv2.destroyAllWindows()
         self.landmarker.close()
 
+def draw_hud(frame, feats, x, y):
+    for key, value in feats.items():
+        if isinstance(value, (list, tuple, np.ndarray)):
+            parts = []
+            for v in value:
+                if isinstance(v, (bool, np.bool_)):
+                    parts.append("T" if v else "F")
+                elif isinstance(v, (float, np.floating)):
+                    parts.append(f"{v:.2f}")
+                else:
+                    parts.append(str(v))
+            text = f"{key}: " + " ".join(parts)
+        elif isinstance(value, (float, np.floating)):
+            text = f"{key}: {value:.2f}"
+        else:
+            text = f"{key}: {value}"
+        cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        y += 20
+
 if __name__ == "__main__":
-    if not Path("models/hand_landmarker.task").exists():
+    from config import CONFIG
+    from features import extract_features
+
+    if not Path(CONFIG["model_path"]).exists():
       raise FileNotFoundError("Mate you gotta run this command: python scripts/download_model.py")
 
     tracker = HandTracker()
+    latest = {}
+
     while True:
         frame, hands = tracker.read()
         if frame is None:
             continue
         h, w = frame.shape[:2]
         for hand in hands:
+            feats = extract_features(hand.landmarks, hand.world, hand.label, w / h)
+            latest[hand.label] = feats
+            x, y = feats['palm_centre']
+            cv2.circle(frame, (int(x*w), int(y*h)), 8, (255, 0, 0), -1)
+            
+            x = 10 if hand.label == "Left" else w - 200
+            draw_hud(frame, feats, x, 30)
+
             for x, y, z in hand.landmarks:
                 px = int(x * w)
                 py = int(y * h)
@@ -128,7 +160,10 @@ if __name__ == "__main__":
             # draw the dots, using: for x, y, z in hand.landmarks
             # draw the label near the wrist, hand.landmarks[0]
         cv2.imshow("camera", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
             break
+        if key == ord("p"):
+            print(latest)
     tracker.close()
     cv2.destroyAllWindows()
