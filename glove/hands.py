@@ -4,6 +4,7 @@ THIS FILE'S HandState IS THE CONTRACT between vision (A) and everyone else. Don'
 without telling the team. Until A's tracking works, run.py --mouse fakes a right hand.
 """
 from dataclasses import dataclass, field
+import numpy as np
 
 
 @dataclass
@@ -12,7 +13,7 @@ class HandState:
     y: float = 0.5            # 0 = top, 1 = bottom
     depth: float = 0.5        # 0 = far from camera, 1 = near (from hand size, auto-ranged)
     roll: float = 0.0         # radians, hand tilt. 0 = fingers up, + = clockwise
-    twist: float = 0.0        # -1..1, + = palm toward camera, - = back of hand
+    twist: float = 0.0        # NOT PRESENT IN v1
     openness: float = 1.0     # 0 = fist, 1 = open hand
     fingers_up: tuple[bool, bool, bool, bool, bool] = (False,) * 5
     pinch: float = 0.0        # 0..1, thumb to index tip
@@ -24,7 +25,7 @@ class HandState:
     landmarks: list = field(default_factory=list)  # 21 (x, y) points in 0..1, for drawing
 
 
-# TODO: class HandsModel:
+# TODO: 
 #   __init__(cfg, aspect)
 #   update(raw_hands, t_seconds) -> {"left": HandState | None, "right": HandState | None}
 #
@@ -38,3 +39,143 @@ class HandState:
 #   6. strike: when vy crosses min_down_speed, wait for the velocity peak (or ~60 ms), emit ONE event,
 #      then re-arm only after vy falls below ~40% of the threshold. Add a 150 ms refractory period.
 #   7. if a hand vanishes, keep its last state with held=True for hold_sec, then return None
+
+import numpy as np
+from dataclasses import replace
+from features import extract_features   # or: from glove.features import extract_features
+
+def TODO(msg):
+    raise NotImplementedError(f"fill in: {msg}")
+
+SIZE_FAR = 0.8
+SIZE_NEAR = 0.1
+HOLD_SEC = 0.25      # how long to keep reporting a hand after tracking drops out
+
+
+def clamp01(v):
+    return float(np.clip(v, 0.0, 1.0))
+
+
+class HandsModel:
+    def __init__(self, cfg=None, aspect=4 / 3):
+        self.aspect = aspect
+        self.last_pos = {"left": None, "right": None}     # used by assign_roles
+        self.last_state = {"left": None, "right": None}   # last HandState per role
+        self.last_seen = {"left": 0.0, "right": 0.0}      # time each role was last really seen
+
+    def assign_roles(self, positions, labels, scores):
+        roles = {}
+
+        # each hand claims the role named by its label; if two hands claim the same one,
+        # the more confident detection keeps it
+        for i, label in enumerate(labels):
+            role = label.lower()
+            if role not in roles or scores[i] > scores[roles[role]]:
+                roles[role] = i
+
+        # two hands but both labelled the same: the other hand must be the opposite role
+        if len(labels) >= 2 and len(roles) == 1:
+            (role, kept), = roles.items()
+            other = 1 - kept if len(labels) == 2 else None
+            if other is not None:
+                roles["left" if role == "right" else "right"] = other
+
+        for role, i in roles.items():
+            self.last_pos[role] = positions[i]
+        return roles
+
+    # def assign_roles(self, positions, labels):
+    #         # positions: list of (x, y), one per hand
+    #         # labels: list of "Left"/"Right", one per hand
+    #         # return: dict like {"left": 0, "right": 1} (indexes into the lists)
+    
+    #         if len(positions) == 0:
+    #             return {}
+    
+    #         if len(positions) >= 2:
+    #             # two hands: smaller x (further left on screen) is "left"
+    #             order = sorted(range(len(positions)), key=lambda i: positions[i][0])
+    #             roles = {"left": order[0], "right": order[1]}
+    #         else:
+    #             x, y = positions[0]
+    #             known = {r: p for r, p in self.last_pos.items() if p is not None}
+    
+    #             if len(known) == 2:
+    #                 # both roles remembered: pick the closer one
+    #                 role = min(known, key=lambda r: np.hypot(x - known[r][0], y - known[r][1]))
+    #             elif len(known) == 1:
+    #                 # one role remembered: if the hand is near it, same role; if far, it's the other one
+    #                 (r, p), = known.items()
+    #                 near = np.hypot(x - p[0], y - p[1]) < 0.25
+    #                 role = r if near else ("left" if r == "right" else "right")
+    #             else:
+    #                 # no memory at all: fall back to the tracker's label
+    #                 role = labels[0].lower()
+    
+    #             roles = {role: 0}
+    
+    #         # remember where each role is now (after all decisions are made)
+    #         for role, i in roles.items():
+    #             self.last_pos[role] = positions[i]
+    #         return roles
+
+    def update(self, raw_hands, t):
+        all_feats = [extract_features(r.landmarks, r.world, r.label, self.aspect)
+                     for r in raw_hands]
+        positions = [f["palm_centre"] for f in all_feats]
+        labels = [r.label for r in raw_hands]
+        scores = [r.label for r in raw_hands]
+        roles = self.assign_roles(positions, labels, scores)
+
+        out = {}
+        for role in ("left", "right"):
+            if role in roles:
+                i = roles[role]
+                state = self._make_state(raw_hands[i], all_feats[i], role, t)
+                self.last_state[role] = state     # after _make_state, which reads the old one
+                self.last_seen[role] = t
+                out[role] = state
+            else:
+                out[role] = self._held_or_none(role, t)
+        return out
+
+    def _make_state(self, raw, feats, role, t):
+        # velocity: compare with this role's previous state
+        prev = self.last_state[role]
+        dt = t - self.last_seen[role]
+        x = float(feats["palm_centre"][0])
+        y = float(feats["palm_centre"][1])
+        if prev is not None and 0 < dt < 0.5:
+            vx = (x - prev.x) / dt
+            vy = (y - prev.y) / dt
+        else:
+            vx = vy = 0.0
+
+        fingers_up = tuple(bool(v) for v in feats["fingers_up"])
+        return HandState(
+            x=x,
+            y=y,
+            depth=clamp01((feats["cam_distance"] - SIZE_FAR) / (SIZE_NEAR - SIZE_FAR)),
+            roll=feats["roll"],
+            openness=float(feats["openness"]),
+            fingers_up=fingers_up,
+            pinch=float(feats["pinch"]),
+            vx=vx,
+            vy=vy,
+            strike=False,
+            strike_vel=0.0,
+            held=False,
+            landmarks=raw.landmarks[:, :2].tolist()
+        )
+
+    def _held_or_none(self, role, t):
+        state = self.last_state[role]
+        if state is None:
+            return None
+        if t - self.last_seen[role] > HOLD_SEC:
+            self.last_state[role] = None
+            self.last_pos[role] = None      # forget it so it can't claim a new hand
+            return None
+        return replace(state, held=True, strike=False)
+
+
