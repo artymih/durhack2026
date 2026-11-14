@@ -18,22 +18,23 @@ note_colours = {
     "B":  (255, 0, 255)
 }
 
-def draw_glowing_orb(frame, orb_point, current_note):
+def draw_glowing_orb(frame, orb_point, current_note, intensity=1.0):
     orb_colour = note_colours.get(current_note, (120, 120, 120))
 
     glow_layer = np.zeros_like(frame)
     cv2.circle(glow_layer, orb_point, 45, orb_colour, -1)
     glow_layer = cv2.GaussianBlur(glow_layer, (91, 91), 0)
 
+    glow_layer = cv2.convertScaleAbs(glow_layer, alpha=intensity, beta=0)
     frame = cv2.add(frame, glow_layer)
     cv2.circle(frame, orb_point, 12, orb_colour, -1)
-    cv2.circle(frame, orb_point, 6, (255, 255, 255), -1)
 
     return frame
 
 if __name__ == "__main__":
     tracker = HandState()
     orb_canvas = None
+    artwork_canvas = None
 
     try:
         while True:
@@ -43,6 +44,10 @@ if __name__ == "__main__":
 
             if orb_canvas is None:
                 orb_canvas = np.zeros_like(frame)
+            if artwork_canvas is None:
+                artwork_canvas = np.zeros_like(frame)
+
+            orb_canvas = cv2.multiply(orb_canvas, 0.90)
 
             display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
 
@@ -52,10 +57,11 @@ if __name__ == "__main__":
                 height, width, _ = frame.shape
                 orb_point = []
                 for x, y in hand.palm:
-                    orb_point.append((int(x * width), int(y * height)))
+                    orb_point = (int(x * width), int(y * height))
+                    orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
+                    artwork_canvas = draw_glowing_orb(artwork_canvas, orb_point, current_note)
 
-                display_frame = draw_glowing_orb(display_frame, orb_point, current_note)
-                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
+            display_frame = cv2.add(display_frame, orb_canvas)
 
             cv2.imshow("Hand Orb Tracker", display_frame)
 
