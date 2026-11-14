@@ -33,21 +33,20 @@ def draw_glowing_orb(frame, orb_point, current_note, intensity=1.0):
 
 if __name__ == "__main__":
     tracker = HandState()
-    orb_canvas = None
-    artwork_canvas = None
+    displayed_orbs = None
+    orb_artwork = None
 
     try:
         while True:
             frame, hands = tracker.read()
             if frame is None:
                 continue
+            if displayed_orbs is None:
+                displayed_orbs = np.zeros_like(frame)
+            if orb_artwork is None:
+                orb_artwork = np.zeros_like(frame)
 
-            if orb_canvas is None:
-                orb_canvas = np.zeros_like(frame)
-            if artwork_canvas is None:
-                artwork_canvas = np.zeros_like(frame)
-
-            orb_canvas = cv2.multiply(orb_canvas, 0.90)
+            displayed_orbs = cv2.multiply(displayed_orbs, 0.90)
 
             display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
             height, width, _ = frame.shape
@@ -60,23 +59,24 @@ if __name__ == "__main__":
                     avg_y = sum(pt[1] for pt in palm_pts) / len(palm_pts)
                     orb_point = (int(avg_x * width), int(avg_y * height))
 
-                orb_canvas = draw_glowing_orb(orb_canvas, orb_point, current_note)
-                artwork_canvas = draw_glowing_orb(artwork_canvas, orb_point, current_note)
-            display_frame = cv2.add(display_frame, orb_canvas)
+                displayed_orbs = draw_glowing_orb(displayed_orbs, orb_point, current_note)
+                permanent_orbs = draw_glowing_orb(permanent_orbs, orb_point, current_note)
+            
+            display_frame = cv2.add(display_frame, displayed_orbs)
            
             cv2.imshow("Hand Orb Tracker", display_frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord('s'):
-                cv2.imwrite("orb_artwork.png", orb_canvas)
-                print("Saved orb_artwork.png!")
+                cv2.imwrite("orb_artwork.png", permanent_orbs)
+                print("Saved orb_artwork.png")
             elif key == ord('c'):
-                orb_canvas = np.zeros_like(frame)
+                displayed_orbs = np.zeros_like(frame)
             elif key == ord('q'):
                 break
     finally:
-        if orb_canvas is not None:
-            cv2.imwrite("orb_artwork.png", orb_canvas)
+        if displayed_orbs is not None:
+            cv2.imwrite("orb_artwork.png", permanent_orbs)
             print("Final artwork saved to orb_artwork.png")
         tracker.close()
         cv2.destroyAllWindows()
