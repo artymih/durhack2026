@@ -44,7 +44,7 @@ class RawHand:
 class HandTracker:
     def __init__(self):
         options = vision.HandLandmarkerOptions(
-          base_options=BaseOptions(model_asset_path="models/hand_landmarker.task"),
+          base_options=BaseOptions(model_asset_path=str(Path(__file__).resolve().parent.parent / "models" / "hand_landmarker.task")),
           running_mode=vision.RunningMode.VIDEO,
           num_hands=2,
           )
@@ -131,50 +131,3 @@ def draw_states(frame, states, w):
                 text = f"{key}: {value}"
             cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
             y += 18
-
-if __name__ == "__main__":
-    from config import CONFIG
-    from features import extract_features
-    from hands import HandsModel        # or: from glove.hands import HandsModel
-    tracker = HandTracker()
-    model = HandsModel()                # aspect defaults to 4/3, see step 2
-
-    if not Path(CONFIG["model_path"]).exists():
-      raise FileNotFoundError("Mate you gotta run this command: python scripts/download_model.py")
-
-    tracker = HandTracker()
-    latest = {}
-
-    while True:
-        frame, hands = tracker.read()
-        if frame is None:
-            continue
-        h, w = frame.shape[:2]
-        model.aspect = w / h
-        states = model.update(hands, time.monotonic())
-
-        for hand in hands:
-            feats = extract_features(hand.landmarks, hand.world, hand.label, w / h)
-            latest[hand.label] = feats
-            x, y = feats['palm_centre']
-            cv2.circle(frame, (int(x*w), int(y*h)), 8, (255, 0, 0), -1)
-            
-            x = 10 if hand.label == "Left" else w - 200
-            # draw_hud(frame, feats, x, 30)
-            draw_states(frame, states, w)
-
-            for x, y, z in hand.landmarks:
-                px = int(x * w)
-                py = int(y * h)
-                cv2.circle(frame, (px, py), 4, (0, 255, 0), -1)
-                wx = int(hand.landmarks[0][0] * w)
-                wy = int(hand.landmarks[0][1] * h)
-                cv2.putText(frame, hand.label, (wx, wy), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        cv2.imshow("camera", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
-            break
-        if key == ord("p"):
-            print(latest)
-    tracker.close()
-    cv2.destroyAllWindows()

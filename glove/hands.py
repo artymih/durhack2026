@@ -11,11 +11,17 @@ import numpy as np
 class HandState:
     x: float = 0.5            # palm centre, 0..1, left->right as the USER SEES the mirrored screen
     y: float = 0.5            # 0 = top, 1 = bottom
+    palm: tuple[float, float] = (0.5, 0.5)
     depth: float = 0.5        # 0 = far from camera, 1 = near (from hand size, auto-ranged)
     roll: float = 0.0         # radians, hand tilt. 0 = fingers up, + = clockwise
     twist: float = 0.0        # NOT PRESENT IN v1
     openness: float = 1.0     # 0 = fist, 1 = open hand
-    fingers_up: tuple[bool, bool, bool, bool, bool] = (False,) * 5
+    thumb: bool = True        # True = up, False = down
+    index: bool = True
+    middle: bool = True
+    ring: bool = True
+    pinky: bool = True
+    # fingers_up: tuple[bool, bool, bool, bool, bool] = (False,) * 5 NOW REMOVED
     pinch: float = 0.0        # 0..1, thumb to index tip
     vx: float = 0.0           # velocity, frame-heights per second
     vy: float = 0.0           # + = moving down
@@ -42,10 +48,7 @@ class HandState:
 
 import numpy as np
 from dataclasses import replace
-from features import extract_features   # or: from glove.features import extract_features
-
-def TODO(msg):
-    raise NotImplementedError(f"fill in: {msg}")
+from glove.features import extract_features   # or: from glove.features import extract_features
 
 SIZE_FAR = 0.8
 SIZE_NEAR = 0.1
@@ -124,7 +127,7 @@ class HandsModel:
                      for r in raw_hands]
         positions = [f["palm_centre"] for f in all_feats]
         labels = [r.label for r in raw_hands]
-        scores = [r.label for r in raw_hands]
+        scores = [r.score for r in raw_hands]
         roles = self.assign_roles(positions, labels, scores)
 
         out = {}
@@ -155,10 +158,15 @@ class HandsModel:
         return HandState(
             x=x,
             y=y,
+            palm=feats["palm_centre"],
             depth=clamp01((feats["cam_distance"] - SIZE_FAR) / (SIZE_NEAR - SIZE_FAR)),
             roll=feats["roll"],
             openness=float(feats["openness"]),
-            fingers_up=fingers_up,
+            thumb=fingers_up[0],
+            index=fingers_up[1],
+            middle=fingers_up[2],
+            ring=fingers_up[3],
+            pinky=fingers_up[4],
             pinch=float(feats["pinch"]),
             vx=vx,
             vy=vy,
