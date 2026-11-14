@@ -45,8 +45,13 @@ class Instrument:
         right = hands.get("right")
         if right is None:
             self.gate = False
-            self.synth.set_lead(midi=None, gate=False, cutoff_hz=1000.0,
-                                vibrato_cents=0.0, reverb=0.0, delay=0.0)
+            self.synth.set_lead(midi=None, 
+                                gate=False, 
+                                cutoff_hz=1000.0,
+                                vibrato_cents=0.0, 
+                                reverb=0.0, 
+                                delay=0.0
+                                )
             return info
 
         # --- pitch: hand x -> note ---
@@ -69,8 +74,20 @@ class Instrument:
         elif right.openness < 0.25:
             self.gate = False
 
-        self.synth.set_lead(midi=midi, gate=self.gate, cutoff_hz=cutoff,
-                            vibrato_cents=0.0, reverb=0.2, delay=0.0)
+        # vibrato
+
+        # reverb
+
+        # delay
+
+
+        self.synth.set_lead(midi=midi, 
+                            gate=self.gate, 
+                            cutoff_hz=cutoff,
+                            vibrato_cents=0.0, 
+                            reverb=0.2, 
+                            delay=0.0
+                            )
 
         info["lead_midi"] = midi
         info["lead_name"] = midi_to_name(midi)
