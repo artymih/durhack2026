@@ -5,6 +5,11 @@ without telling the team. Until A's tracking works, run.py --mouse fakes a right
 """
 from dataclasses import dataclass, field
 import numpy as np
+from glove.smoothing import OneEuro, Stable
+
+STABLE_FRAMES = 4      # about 0.13 s at 30 fps; later: config.py
+FILTER_SETTINGS = dict(min_cutoff=0.3, beta=5.0)     # later: move to config.py for C
+SMOOTHED = ("x", "y", "cam_distance", "roll", "openness", "pinch")
 
 
 @dataclass
@@ -52,7 +57,7 @@ from glove.features import extract_features   # or: from glove.features import e
 
 SIZE_FAR = 0.8
 SIZE_NEAR = 0.1
-HOLD_SEC = 0.25      # how long to keep reporting a hand after tracking drops out
+HOLD_SEC = 0.05      # how long to keep reporting a hand after tracking drops out
 
 
 def clamp01(v):
@@ -65,6 +70,14 @@ class HandsModel:
         self.last_pos = {"left": None, "right": None}     # used by assign_roles
         self.last_state = {"left": None, "right": None}   # last HandState per role
         self.last_seen = {"left": 0.0, "right": 0.0}      # time each role was last really seen
+        self.filters = {role: self._new_filters() for role in ("left", "right")}
+        self.stable = {role: self._new_stable() for role in ("left", "right")}
+
+    def _new_filters(self):
+        return {name: OneEuro(**FILTER_SETTINGS) for name in SMOOTHED}
+
+    def _new_stable(self):
+        return [Stable(STABLE_FRAMES) for _ in range(5)]    # thumb, index, middle, ring, pinky
 
     def assign_roles(self, positions, labels, scores):
         roles = {}
@@ -144,30 +157,39 @@ class HandsModel:
 
     def _make_state(self, raw, feats, role, t):
         # velocity: compare with this role's previous state
-        prev = self.last_state[role]
-        dt = t - self.last_seen[role]
-        x = float(feats["palm_centre"][0])
-        y = float(feats["palm_centre"][1])
-        if prev is not None and 0 < dt < 0.5:
-            vx = (x - prev.x) / dt
-            vy = (y - prev.y) / dt
-        else:
-            vx = vy = 0.0
+        # prev = self.last_state[role]
+        # dt = t - self.last_seen[role]
+        # x = float(feats["palm_centre"][0])
+        # y = float(feats["palm_centre"][1])
+        # if prev is not None and 0 < dt < 0.5:
+        #     vx = (x - prev.x) / dt
+        #     vy = (y - prev.y) / dt
+        # else:
+        #     vx = vy = 0.0
+        f = self.filters[role]
+        x = f["x"](float(feats["palm_centre"][0]), t)
+        y = f["y"](float(feats["palm_centre"][1]), t)
+        depth = f["cam_distance"](feats["cam_distance"], t)
+        roll = f["roll"](feats["roll"], t)
+        openness = f["openness"](float(feats["openness"]), t)
+        pinch = f["pinch"](float(feats["pinch"]), t)
+        vx = f["x"].velocity
+        vy = f["y"].velocity
+        fingers_up = tuple(s(bool(v)) for s, v in zip(self.stable[role], feats["fingers_up"]))
 
-        fingers_up = tuple(bool(v) for v in feats["fingers_up"])
         return HandState(
             x=x,
             y=y,
             palm=feats["palm_centre"],
-            depth=clamp01((feats["cam_distance"] - SIZE_FAR) / (SIZE_NEAR - SIZE_FAR)),
-            roll=feats["roll"],
-            openness=float(feats["openness"]),
+            depth=clamp01((depth - SIZE_FAR) / (SIZE_NEAR - SIZE_FAR)),
+            roll=roll,
+            openness=openness,
             thumb=fingers_up[0],
             index=fingers_up[1],
             middle=fingers_up[2],
             ring=fingers_up[3],
             pinky=fingers_up[4],
-            pinch=float(feats["pinch"]),
+            pinch=pinch,
             vx=vx,
             vy=vy,
             strike=False,
@@ -183,7 +205,7 @@ class HandsModel:
         if t - self.last_seen[role] > HOLD_SEC:
             self.last_state[role] = None
             self.last_pos[role] = None      # forget it so it can't claim a new hand
+            self.filters[role] = self._new_filters()   # fresh smoothing, so a returning hand doesn't glide in
+            self.stable[role] = self._new_stable()
             return None
         return replace(state, held=True, strike=False)
-
-
