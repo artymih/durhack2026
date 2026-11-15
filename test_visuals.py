@@ -1,191 +1,90 @@
+"""Quick visual test for glove/visuals.py. Sits in the project root. Run:  python try_visuals.py
+
+Move your hands in front of the camera. Each hand gets a glowing orb drawn by glove.visuals.draw_glowing_orb,
+coloured by the note the instrument WOULD play at that spot (hand x -> quantize -> note -> colour).
+No audio is used, so it works without B's synth.
+
+Keys:  s = save orb_artwork.png   c = clear   q = quit
+
+If your function has a different name, change the import below.
+"""
 import cv2
 import numpy as np
 
+from glove.hands import HandState
+from glove.instrument import Instrument
 from glove.tracker import HandTracker
+from glove.visuals import draw_glowing_orb   # <-- the code under test
 
 
-NOTE_COLOURS = {
-    "C":  (0, 0, 255),
-    "C#": (0, 85, 255),
-    "D":  (0, 165, 255),
-    "D#": (0, 215, 255),
-    "E":  (0, 255, 255),
-    "F":  (0, 255, 128),
-    "F#": (0, 255, 0),
-    "G":  (255, 255, 0),
-    "G#": (255, 150, 0),
-    "A":  (255, 0, 0),
-    "A#": (255, 0, 140),
-    "B":  (255, 0, 255),
-}
+class FakeSynth:
+    """Instrument wants a synth. This one ignores every call, so no audio is needed."""
 
-NOTE_NAMES = list(NOTE_COLOURS.keys())
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
 
 
-def draw_glowing_orb(frame, orb_point, current_note):
-
-    colour = NOTE_COLOURS.get(
-        current_note,
-        (120, 120, 120),
-    )
-
-    glow = np.zeros_like(frame)
-
-    cv2.circle(
-        glow,
-        orb_point,
-        45,
-        colour,
-        -1,
-    )
-
-    glow = cv2.GaussianBlur(
-        glow,
-        (91, 91),
-        0,
-    )
-
-    cv2.add(
-        frame,
-        glow,
-        dst=frame,
-    )
-
-    cv2.circle(
-        frame,
-        orb_point,
-        12,
-        colour,
-        -1,
-    )
-
-    cv2.circle(
-        frame,
-        orb_point,
-        6,
-        (255, 255, 255),
-        -1,
-    )
+def pitch_class(note_name):
+    """midi_to_name() gives 'A4' but the colour table is keyed 'A'. Strip the octave: 'C#5' -> 'C#'."""
+    return note_name.rstrip("0123456789-")
 
 
 tracker = HandTracker()
-
-orb_canvas = None
+instruments = {}    # one Instrument per hand slot, so each hand keeps its own sticky note zones
+orb_canvas = None   # trail: fades out
+artwork = None      # never fades: this is what S saves
 
 try:
-
     while True:
-
         frame, hands = tracker.read()
-
         if frame is None:
             continue
 
         h, w = frame.shape[:2]
-
         if orb_canvas is None:
-
             orb_canvas = np.zeros_like(frame)
+            artwork = np.zeros_like(frame)
 
-        display = cv2.convertScaleAbs(
-            frame,
-            alpha=0.4,
-            beta=0,
-        )
+        orb_canvas = cv2.convertScaleAbs(orb_canvas, alpha=0.90)   # fade the trail a little each frame
+        display = cv2.convertScaleAbs(frame, alpha=0.4)            # dim the camera so the orbs pop
 
-        for hand in hands:
-
+        labels = []
+        for i, hand in enumerate(hands):
             palm = hand.landmarks[[0, 5, 9, 13, 17]]
+            x = float(palm[:, 0].mean())
+            y = float(palm[:, 1].mean())
+            orb_point = (int(x * w), int(y * h))
 
-            px = int(
-                palm[:, 0].mean() * w
-            )
+            # Ask the real instrument which note this hand position plays.
+            if i not in instruments:
+                instruments[i] = Instrument(FakeSynth())
+            fake_hand = HandState(x=x, y=y, openness=1.0)
+            info = instruments[i].update({"left": None, "right": fake_hand}, 0.016)
+            note = info["lead_name"]           # e.g. "A4"
+            colour_key = pitch_class(note)     # e.g. "A"
 
-            py = int(
-                palm[:, 1].mean() * h
-            )
+            orb_canvas = draw_glowing_orb(orb_canvas, orb_point, colour_key)
+            artwork = draw_glowing_orb(artwork, orb_point, colour_key, intensity=0.15)
+            labels.append((orb_point, f"{hand.label} {note}"))
 
-            orb_point = (px, py)
+        output = cv2.add(display, orb_canvas)
+        for (px, py), text in labels:
+            cv2.putText(output, text, (px + 20, py), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-            note = NOTE_NAMES[
-                min(
-                    int(px / w * 12),
-                    11,
-                )
-            ]
-
-            draw_glowing_orb(
-                display,
-                orb_point,
-                note,
-            )
-
-            draw_glowing_orb(
-                orb_canvas,
-                orb_point,
-                note,
-            )
-
-            cv2.putText(
-                display,
-                hand.label,
-                (px + 20, py),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                1,
-            )
-
-        output = cv2.addWeighted(
-            display,
-            1.0,
-            orb_canvas,
-            0.3,
-            0,
-        )
-
-        cv2.imshow(
-            "Orb Visual Test",
-            output,
-        )
+        cv2.imshow("Visuals Test", output)
 
         key = cv2.waitKey(1) & 0xFF
-
         if key == ord("s"):
-
-            cv2.imwrite(
-                "orb_artwork.png",
-                orb_canvas,
-            )
-
-            print(
-                "Saved orb_artwork.png"
-            )
-
+            cv2.imwrite("orb_artwork.png", artwork)
+            print("Saved orb_artwork.png")
         elif key == ord("c"):
-
             orb_canvas[:] = 0
-
-            print(
-                "Canvas cleared"
-            )
-
+            artwork[:] = 0
+            print("Cleared")
         elif key == ord("q"):
-
             break
 
 finally:
-
-    if orb_canvas is not None:
-
-        cv2.imwrite(
-            "orb_artwork.png",
-            orb_canvas,
-        )
-
-        print(
-            "Final artwork saved"
-        )
-
     tracker.close()
     cv2.destroyAllWindows()
