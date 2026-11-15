@@ -3,13 +3,18 @@
 THIS FILE'S HandState IS THE CONTRACT between vision (A) and everyone else. Don't rename fields
 without telling the team. Until A's tracking works, run.py --mouse fakes a right hand.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import numpy as np
 from glove.smoothing import OneEuro, Stable
+from glove.config import CONFIG
+from glove.features import extract_features
 
-STABLE_FRAMES = 4      # about 0.13 s at 30 fps; later: config.py
-FILTER_SETTINGS = dict(min_cutoff=0.3, beta=5.0)     # later: move to config.py for C
+STABLE_FRAMES = CONFIG["stable_frames"]      # about 0.13 s at 30 fps;
+FILTER_SETTINGS = CONFIG["filter_settings"] 
 SMOOTHED = ("x", "y", "cam_distance", "roll", "openness", "pinch")
+SIZE_FAR = CONFIG["size_far"]
+SIZE_NEAR = CONFIG["size_near"]
+HOLD_SEC = CONFIG["hold_sec"]      # how long to keep reporting a hand after tracking drops out
 
 
 @dataclass
@@ -50,14 +55,6 @@ class HandState:
 #   6. strike: when vy crosses min_down_speed, wait for the velocity peak (or ~60 ms), emit ONE event,
 #      then re-arm only after vy falls below ~40% of the threshold. Add a 150 ms refractory period.
 #   7. if a hand vanishes, keep its last state with held=True for hold_sec, then return None
-
-import numpy as np
-from dataclasses import replace
-from glove.features import extract_features   # or: from glove.features import extract_features
-
-SIZE_FAR = 0.8
-SIZE_NEAR = 0.1
-HOLD_SEC = 0.05      # how long to keep reporting a hand after tracking drops out
 
 
 def clamp01(v):

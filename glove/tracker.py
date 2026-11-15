@@ -43,6 +43,7 @@ class RawHand:
 
 class HandTracker:
     def __init__(self):
+        from glove.config import CONFIG
         options = vision.HandLandmarkerOptions(
           base_options=BaseOptions(model_asset_path=str(Path(__file__).resolve().parent.parent / "models" / "hand_landmarker.task")),
           running_mode=vision.RunningMode.VIDEO,
@@ -50,8 +51,7 @@ class HandTracker:
           )
         self.landmarker = vision.HandLandmarker.create_from_options(options)
 
-        # cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)   # 0 = first camera, DSHOW = faster on Windows
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(CONFIG["camera_index"], CONFIG["camera_backend"])
         self.start = time.monotonic()
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
