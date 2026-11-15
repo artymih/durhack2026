@@ -1,8 +1,3 @@
-"""Turns raw per-frame detections into smooth, stable left/right hand states. (Owner: A)
-
-THIS FILE'S HandState IS THE CONTRACT between vision (A) and everyone else. Don't rename fields
-without telling the team. Until A's tracking works, run.py --mouse fakes a right hand.
-"""
 from dataclasses import dataclass, field
 import numpy as np
 from glove.smoothing import OneEuro, Stable
