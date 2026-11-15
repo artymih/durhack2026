@@ -36,20 +36,7 @@ class HandState:
     landmarks: list = field(default_factory=list)  # 21 (x, y) points in 0..1, for drawing
 
 
-# TODO: 
-#   __init__(cfg, aspect)
-#   update(raw_hands, t_seconds) -> {"left": HandState | None, "right": HandState | None}
-#
-# Steps inside update():
-#   1. features.extract_features() for each raw hand
-#   2. roles: with 2 hands the leftmost on screen is "left"; with 1 hand keep the role whose last
-#      position is closest (fall back to MediaPipe's label). Don't trust the label alone, it flickers.
-#   3. smooth with OneEuro (x, y, size, roll, twist, curl, pinch); finger count through Stable
-#   4. depth = AutoRange over smoothed hand size
-#   5. velocity = OneEuro .velocity of x and y
-#   6. strike: when vy crosses min_down_speed, wait for the velocity peak (or ~60 ms), emit ONE event,
-#      then re-arm only after vy falls below ~40% of the threshold. Add a 150 ms refractory period.
-#   7. if a hand vanishes, keep its last state with held=True for hold_sec, then return None
+
 
 import numpy as np
 from dataclasses import replace

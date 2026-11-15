@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from dataclasses import fields
 from glove.hands import HandState
 from glove.music import degree_to_midi, midi_to_name
 
@@ -18,6 +19,14 @@ note_colours = {
     "B":  (255, 0, 255)
 }
 
+HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    (5, 9), (9, 10), (10, 11), (11, 12),
+    (9, 13), (13, 14), (14, 15), (15, 16),
+    (13, 17), (0, 17), (17, 18), (18, 19), (19, 20),
+)
+
 def draw_orb(frame, orb_center, current_note, intensity=1.0):
     orb_colour = note_colours.get(current_note, (120, 120, 120))
 
@@ -28,6 +37,73 @@ def draw_orb(frame, orb_center, current_note, intensity=1.0):
     glow = cv2.convertScaleAbs(glow, alpha=intensity, beta=0)
     frame = cv2.add(frame, glow)
     cv2.circle(frame, orb_center, 6, orb_colour, -1)
+
+    return frame
+
+def draw_skeleton(frame, landmarks, colour=(0, 0, 0)):
+    height, width = frame.shape[:2]
+    points = [(int(pt[0] * width), int(pt[1] * height)) for pt in landmarks]
+
+    if len(points) < 21:
+        return frame
+
+    for a, b in HAND_CONNECTIONS:
+        cv2.line(frame, points[a], points[b], colour, 2, cv2.LINE_AA)
+
+    for point in points:
+        cv2.circle(frame, point, 4, colour, -1, cv2.LINE_AA)
+
+    return frame
+
+def format_value(name, value):
+    if name == "landmarks":
+        return f"{len(value)} pts"
+    if isinstance(value, tuple):
+        return "(" + ", ".join(f"{v:.3f}" for v in value) + ")"
+    if isinstance(value, float):
+        return f"{value:.3f}"
+    return str(value)
+
+def draw_dev_info(frame, hands):
+    width = frame.shape[1]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.42
+    line_height = 17
+    pad = 8
+
+    for role in ("left", "right"):
+        hand = hands.get(role)
+
+        lines = [role.upper()]
+        if hand is None:
+            lines.append("not detected")
+        else:
+            for f in fields(hand):
+                lines.append(f"{f.name}: {format_value(f.name, getattr(hand, f.name))}")
+
+        text_width = max(cv2.getTextSize(line, font, scale, 1)[0][0] for line in lines)
+        panel_width = text_width + 2 * pad
+        panel_height = len(lines) * line_height + 2 * pad
+
+        x0 = 10 if role == "left" else width - panel_width - 10
+        y0 = 10
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x0, y0), (x0 + panel_width, y0 + panel_height), (0, 0, 0), -1)
+        frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
+
+        for i, line in enumerate(lines):
+            text_colour = (0, 255, 255) if i == 0 else (255, 255, 255)
+            cv2.putText(
+                frame,
+                line,
+                (x0 + pad, y0 + pad + 12 + i * line_height),
+                font,
+                scale,
+                text_colour,
+                1,
+                cv2.LINE_AA,
+            )
 
     return frame
 
@@ -51,7 +127,7 @@ def add_border(frame, current_note, chord_name, note_colour):
         2,
         cv2.LINE_AA,
     )
-    controls = "[S] Save Artwork   |   [C] Clear Trails   |   [Q] Quit"
+    controls = "[S] Save Artwork   |   [C] Clear Trails   |   [D] Dev Info   |   [Q] Quit"
     cv2.putText(
         framed,
         controls,
@@ -103,7 +179,7 @@ if __name__ == "__main__":
                         chord_name = "add7"
                     else:
                         chord_name = "add9"
-                
+
                 palm_pts = hand.palm
                 if len(palm_pts) > 0:
                     avg_x = sum(pt[0] for pt in palm_pts) / len(palm_pts)
@@ -112,13 +188,13 @@ if __name__ == "__main__":
 
                     displayed_orbs = draw_orb(displayed_orbs, orb_center, current_note)
                     permanent_orbs = draw_orb(permanent_orbs, orb_center, current_note)
-            
+
             display_frame = cv2.add(display_frame, displayed_orbs)
 
             final_display = add_border(
                 display_frame, current_note, chord_name, (note_colour)
             )
-           
+
             cv2.imshow("Hand Orb Tracker", final_display)
 
             key = cv2.waitKey(1) & 0xFF

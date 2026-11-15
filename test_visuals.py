@@ -1,90 +1,158 @@
-"""Quick visual test for glove/visuals.py. Sits in the project root. Run:  python try_visuals.py
+import argparse
+import importlib.util
+import sys
+import time
+from pathlib import Path
 
-Move your hands in front of the camera. Each hand gets a glowing orb drawn by glove.visuals.draw_glowing_orb,
-coloured by the note the instrument WOULD play at that spot (hand x -> quantize -> note -> colour).
-No audio is used, so it works without B's synth.
-
-Keys:  s = save orb_artwork.png   c = clear   q = quit
-
-If your function has a different name, change the import below.
-"""
 import cv2
 import numpy as np
 
-from glove.hands import HandState
+from glove.config import CONFIG
+from glove.hands import HandsModel
 from glove.instrument import Instrument
+from glove.music import midi_to_name
 from glove.tracker import HandTracker
-from glove.visuals import draw_glowing_orb   # <-- the code under test
+
+GREY = (120, 120, 120)
 
 
-class FakeSynth:
-    """Instrument wants a synth. This one ignores every call, so no audio is needed."""
+class NullSynth:
 
-    def __getattr__(self, name):
-        return lambda *args, **kwargs: None
+    def set_lead(self, **kwargs):
+        pass
 
-
-def pitch_class(note_name):
-    """midi_to_name() gives 'A4' but the colour table is keyed 'A'. Strip the octave: 'C#5' -> 'C#'."""
-    return note_name.rstrip("0123456789-")
+    def set_pad(self, **kwargs):
+        pass
 
 
-tracker = HandTracker()
-instruments = {}    # one Instrument per hand slot, so each hand keeps its own sticky note zones
-orb_canvas = None   # trail: fades out
-artwork = None      # never fades: this is what S saves
+def find_target():
+    here = Path(__file__).resolve().parent
+    candidates = list(here.glob("*.py")) + list(here.glob("*/*.py"))
 
-try:
-    while True:
-        frame, hands = tracker.read()
-        if frame is None:
+    for path in sorted(candidates):
+        if path.resolve() == Path(__file__).resolve():
             continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if "def draw_orb" in text:
+            return path
 
-        h, w = frame.shape[:2]
-        if orb_canvas is None:
-            orb_canvas = np.zeros_like(frame)
-            artwork = np.zeros_like(frame)
+    return None
 
-        orb_canvas = cv2.convertScaleAbs(orb_canvas, alpha=0.90)   # fade the trail a little each frame
-        display = cv2.convertScaleAbs(frame, alpha=0.4)            # dim the camera so the orbs pop
 
-        labels = []
-        for i, hand in enumerate(hands):
-            palm = hand.landmarks[[0, 5, 9, 13, 17]]
-            x = float(palm[:, 0].mean())
-            y = float(palm[:, 1].mean())
-            orb_point = (int(x * w), int(y * h))
+def load_module(path):
+    spec = importlib.util.spec_from_file_location("orb_module", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-            # Ask the real instrument which note this hand position plays.
-            if i not in instruments:
-                instruments[i] = Instrument(FakeSynth())
-            fake_hand = HandState(x=x, y=y, openness=1.0)
-            info = instruments[i].update({"left": None, "right": fake_hand}, 0.016)
-            note = info["lead_name"]           # e.g. "A4"
-            colour_key = pitch_class(note)     # e.g. "A"
 
-            orb_canvas = draw_glowing_orb(orb_canvas, orb_point, colour_key)
-            artwork = draw_glowing_orb(artwork, orb_point, colour_key, intensity=0.15)
-            labels.append((orb_point, f"{hand.label} {note}"))
+def pitch_class(name):
+    return name.rstrip("0123456789-")
 
-        output = cv2.add(display, orb_canvas)
-        for (px, py), text in labels:
-            cv2.putText(output, text, (px + 20, py), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-        cv2.imshow("Visuals Test", output)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("target", nargs="?")
+    parser.add_argument("--audio", action="store_true")
+    args = parser.parse_args()
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("s"):
-            cv2.imwrite("orb_artwork.png", artwork)
-            print("Saved orb_artwork.png")
-        elif key == ord("c"):
-            orb_canvas[:] = 0
-            artwork[:] = 0
-            print("Cleared")
-        elif key == ord("q"):
-            break
+    target = Path(args.target) if args.target else find_target()
 
-finally:
-    tracker.close()
-    cv2.destroyAllWindows()
+    if target is None or not target.is_file():
+        print("Could not find the orb tracker file. Pass its path as an argument.")
+        sys.exit(1)
+
+    orb = load_module(target)
+
+    if args.audio:
+        from glove.synth import Synth
+        synth = Synth()
+        synth.start()
+    else:
+        synth = NullSynth()
+
+    tracker = HandTracker()
+    hands_model = HandsModel()
+    instrument = Instrument(synth)
+
+    root_note = pitch_class(midi_to_name(CONFIG["music"]["root_midi"]))
+
+    displayed_orbs = None
+    permanent_orbs = None
+    previous_time = time.monotonic()
+
+    try:
+        while True:
+            frame, raw_hands = tracker.read()
+            if frame is None:
+                continue
+
+            now = time.monotonic()
+            dt = now - previous_time
+            previous_time = now
+
+            height, width, _ = frame.shape
+            hands_model.aspect = width / height
+
+            hands = hands_model.update(raw_hands, now)
+            info = instrument.update(hands, dt)
+
+            if displayed_orbs is None:
+                displayed_orbs = np.zeros_like(frame)
+            if permanent_orbs is None:
+                permanent_orbs = np.zeros_like(frame)
+
+            displayed_orbs = cv2.convertScaleAbs(displayed_orbs, alpha=0.90)
+            display_frame = cv2.convertScaleAbs(frame, alpha=0.4, beta=0)
+
+            lead_name = info["lead_name"]
+            lead_note = pitch_class(lead_name) if lead_name else None
+            chord_label = info["chord_name"] or "none"
+
+            orbs = (
+                (hands.get("right"), lead_note),
+                (hands.get("left"), root_note),
+            )
+
+            for hand, note in orbs:
+                if hand is None or note is None:
+                    continue
+                orb_center = (int(hand.x * width), int(hand.y * height))
+                displayed_orbs = orb.draw_orb(displayed_orbs, orb_center, note)
+                permanent_orbs = orb.draw_orb(permanent_orbs, orb_center, note)
+
+            display_frame = cv2.add(display_frame, displayed_orbs)
+
+            note_colour = orb.note_colours.get(lead_note, GREY)
+            final_display = orb.add_border(
+                display_frame,
+                lead_name or "None",
+                f"{chord_label} - {info['scale']}",
+                note_colour,
+            )
+
+            cv2.imshow("Hand Orb Demo", final_display)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("s"):
+                cv2.imwrite("orb_artwork.png", permanent_orbs)
+                print("Saved orb_artwork.png")
+            elif key == ord("c"):
+                displayed_orbs = np.zeros_like(frame)
+            elif key == ord("q") or key == 27:
+                break
+    finally:
+        if permanent_orbs is not None:
+            cv2.imwrite("orb_artwork.png", permanent_orbs)
+            print("Final artwork saved to orb_artwork.png")
+        tracker.close()
+        if args.audio:
+            synth.stop()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()
