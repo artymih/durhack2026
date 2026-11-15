@@ -3,3 +3,6 @@ models
 .vscode
 debug_hud.py
 orb_artwork.png
+test_*.py
+__pycache__/
+*.pyc
