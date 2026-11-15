@@ -34,7 +34,7 @@ def draw_glowing_orb(frame, orb_point, current_note, intensity=1.0):
 if __name__ == "__main__":
     tracker = HandState()
     displayed_orbs = None
-    orb_artwork = None
+    permanent_orbs = None
 
     try:
         while True:
@@ -43,8 +43,8 @@ if __name__ == "__main__":
                 continue
             if displayed_orbs is None:
                 displayed_orbs = np.zeros_like(frame)
-            if orb_artwork is None:
-                orb_artwork = np.zeros_like(frame)
+            if permanent_orbs is None:
+                permanent_orbs = np.zeros_like(frame)
 
             displayed_orbs = cv2.multiply(displayed_orbs, 0.90)
 
