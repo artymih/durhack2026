@@ -1,6 +1,7 @@
 from glove.config import CONFIG
 from glove.music import (
     SCALES,
+    SCALE_ORDER,
     degree_to_midi,
     midi_to_name,
     quantize_cell,
@@ -17,11 +18,11 @@ class Instrument:
         self.cell = -1
         self.gate = False
 
+        self.scale_idx = SCALE_ORDER.index("minor_pentatonic")
+
     def update(self, hands, dt):
 
         m = CONFIG["music"]
-
-        scale = SCALES[m["lead_scale"]]
 
         info = {
             "mode": "Play",
@@ -33,6 +34,32 @@ class Instrument:
 
         right = hands.get("right")
         left = hands.get("left")
+
+        # ------------------------------------------
+        # Left X -> scale
+        # ------------------------------------------
+
+        LEFT_X_MIN = 0.10
+        LEFT_X_MAX = 0.90
+
+        if left is not None:
+            u_scale = min(
+                max(
+                    (left.x - LEFT_X_MIN) / (LEFT_X_MAX - LEFT_X_MIN),
+                    0.0,
+                ),
+                1.0,
+            )
+
+            self.scale_idx = quantize_cell(
+                u_scale,
+                len(SCALE_ORDER),
+                self.scale_idx,
+            )
+
+        scale_name = SCALE_ORDER[self.scale_idx]
+        scale = SCALES[scale_name]
+        info["scale"] = scale_name
 
         # ==================================================
         # RIGHT HAND - LEAD
@@ -71,6 +98,8 @@ class Instrument:
                     * m["lead_octaves"]
                     + 1
                 )
+
+                self.cell = min(self.cell, cells - 1)
 
                 self.cell = quantize_cell(
                     u,
@@ -121,23 +150,20 @@ class Instrument:
             # Roll -> vibrato
             # ------------------------------------------
 
-            roll = getattr(
+            roll = -1 * getattr(
                 right,
                 "roll",
                 0.0,
             )
 
-            DEAD_ZONE = 15.0
+            DEAD_ZONE = 10.0
+            MAX_ROLL = 70.0
+            MAX_VIBRATO = 40.0
 
-            amount = max(
-                0.0,
-                abs(roll) - DEAD_ZONE,
-            )
+            t = (roll - DEAD_ZONE) / (MAX_ROLL - DEAD_ZONE)
+            t = min(max(t, 0.0), 1.0)
 
-            vibrato = min(
-                amount * 0.2,
-                12.0,
-            )
+            vibrato = t * MAX_VIBRATO
 
             # ------------------------------------------
             # Depth -> reverb
@@ -149,9 +175,12 @@ class Instrument:
                 0.0,
             )
 
+            DEPTH_NEAR = 0.70
+            DEPTH_FAR = 0.30
+
             reverb = min(
                 max(
-                    (depth - 0.15) / 0.45,
+                    (depth - DEPTH_FAR) / (DEPTH_NEAR - DEPTH_FAR),
                     0.0,
                 ),
                 1.0,
