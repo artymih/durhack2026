@@ -23,7 +23,7 @@ def pitch_class(name):
 
 def main():
 
-    print("AirGlove running. [S] save  [C] clear  [D] dev info  [Q/Esc] quit")
+    print("Orb running. [S] save  [C] clear  [D] dev info  [Q/Esc] quit")
 
     tracker = HandTracker()
 
@@ -156,7 +156,7 @@ def main():
             )
 
             cv2.imshow(
-                "AirGlove",
+                "The Harmonic Orb",
                 final_display,
             )
 
