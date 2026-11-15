@@ -14,7 +14,7 @@ CONFIG = {
     # megan A
     "camera": {},
     "model_path": "models/hand_landmarker.task",
-    "swap_hand": False,
+    "swap_hand": True,
     "camera_index": 0,
     "camera_backend":cv2.CAP_DSHOW if sys.platform.startswith("win") else cv2.CAP_ANY,  # you can change this to just cv2.CAP_DSHOW if using windows, try cv2.CAP_MSMF if that's not working
     "stable_frames": 4, # how many frames should hand/fingers be stable for before it actually updates the note, 4 = about 0.13 s at 30 fps;
