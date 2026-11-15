@@ -1,13 +1,29 @@
 import time
 import cv2
+import numpy as np
 
 from glove.tracker import HandTracker
 from glove.hands import HandsModel
 from glove.instrument import Instrument
 from glove.synth import Synth
+from glove.config import CONFIG
+from glove.music import midi_to_name
+from glove.visuals import (
+    draw_orb,
+    draw_skeleton,
+    draw_dev_info,
+    add_border,
+    note_colours,
+)
+
+
+def pitch_class(name):
+    return name.rstrip("0123456789-")
 
 
 def main():
+
+    print("AirGlove running. [S] save  [C] clear  [D] dev info  [Q/Esc] quit")
 
     tracker = HandTracker()
 
@@ -17,6 +33,13 @@ def main():
     synth.start()
 
     instrument = Instrument(synth)
+
+    root_note = pitch_class(midi_to_name(CONFIG["music"]["root_midi"]))
+
+    displayed_orbs = None
+    permanent_orbs = None
+
+    dev_mode = False
 
     previous_time = time.monotonic()
 
@@ -50,169 +73,117 @@ def main():
                 dt,
             )
 
-            # ----------------------------------
-            # HUD
-            # ----------------------------------
-
             left = hands.get("left")
             right = hands.get("right")
 
-            y = 25
+            if displayed_orbs is None:
+                displayed_orbs = np.zeros_like(frame)
 
-            cv2.putText(
-                frame,
-                f"Lead: {info['lead_name']}",
-                (10, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2,
-            )
+            if permanent_orbs is None:
+                permanent_orbs = np.zeros_like(frame)
 
-            y += 25
+            lead_name = info["lead_name"]
 
-            cv2.putText(
-                frame,
-                f"Chord: {info['chord_name']}",
-                (10, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2,
-            )
+            lead_note = pitch_class(lead_name) if lead_name else None
 
-            y += 25
+            chord_label = info["chord_name"] or "none"
 
-            cv2.putText(
-                frame,
-                f"Audio: {synth.level():.2f}",
-                (10, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2,
-            )
+            if dev_mode:
 
-            # ----------------------------------
-            # Left hand info
-            # ----------------------------------
+                display_frame = frame.copy()
 
-            if left is not None:
+                for hand in (left, right):
 
-                y += 35
+                    if hand is not None:
+                        display_frame = draw_skeleton(
+                            display_frame,
+                            hand.landmarks,
+                        )
 
-                cv2.putText(
-                    frame,
-                    f"L vol={1.0-left.y:.2f}",
-                    (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    1,
+                display_frame = draw_dev_info(
+                    display_frame,
+                    hands,
                 )
 
-                y += 20
+            else:
 
-                cv2.putText(
-                    frame,
-                    f"L roll={left.roll:.1f}",
-                    (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    1,
+                displayed_orbs = cv2.convertScaleAbs(
+                    displayed_orbs,
+                    alpha=0.90,
                 )
 
-            # ----------------------------------
-            # Right hand info
-            # ----------------------------------
-
-            if right is not None:
-
-                y += 35
-
-                cv2.putText(
+                display_frame = cv2.convertScaleAbs(
                     frame,
-                    f"R reverb={right.depth:.2f}",
-                    (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    1,
+                    alpha=0.4,
+                    beta=0,
                 )
 
-                y += 20
+                for hand, note in (
+                    (right, lead_note),
+                    (left, root_note),
+                ):
 
-                cv2.putText(
-                    frame,
-                    f"R pinch={right.pinch:.2f}",
-                    (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    1,
-                )
+                    if hand is None or note is None:
+                        continue
 
-                y += 20
-                
-                cv2.putText(
-                    frame,
-                    f"R vibrato={right.roll:.2f}",
-                    (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    1,
-                )
-
-            # ----------------------------------
-            # Draw hand landmarks
-            # ----------------------------------
-
-            for hand in raw_hands:
-
-                for x, ylm, z in hand.landmarks:
-
-                    px = int(x * w)
-                    py = int(ylm * h)
-
-                    cv2.circle(
-                        frame,
-                        (px, py),
-                        4,
-                        (0, 255, 0),
-                        -1,
+                    orb_center = (
+                        int(hand.x * w),
+                        int(hand.y * h),
                     )
 
-                tx = int(
-                    hand.landmarks[0][0] * w
+                    displayed_orbs = draw_orb(
+                        displayed_orbs,
+                        orb_center,
+                        note,
+                    )
+
+                    permanent_orbs = draw_orb(
+                        permanent_orbs,
+                        orb_center,
+                        note,
+                    )
+
+                display_frame = cv2.add(
+                    display_frame,
+                    displayed_orbs,
                 )
 
-                ty = int(
-                    hand.landmarks[0][1] * h
-                )
-
-                cv2.putText(
-                    frame,
-                    hand.label,
-                    (tx, ty),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 0, 0),
-                    2,
-                )
+            final_display = add_border(
+                display_frame,
+                lead_name or "None",
+                f"{chord_label} - {info['scale']}",
+                note_colours.get(lead_note, (120, 120, 120)),
+            )
 
             cv2.imshow(
                 "AirGlove",
-                frame,
+                final_display,
             )
 
             key = cv2.waitKey(1) & 0xFF
 
-            if key == 27:  # ESC
+            if key == ord("s"):
+                cv2.imwrite("orb_artwork.png", permanent_orbs)
+                print("Saved orb_artwork.png")
+
+            elif key == ord("c"):
+                displayed_orbs = np.zeros_like(frame)
+
+            elif key in (ord("d"), ord("D")):
+                dev_mode = not dev_mode
+                print(f"Dev info {'on' if dev_mode else 'off'}")
+
+            elif key == ord("q") or key == 27:
                 break
 
+            elif key != 255:
+                print(f"Unhandled key: {key}")
+
     finally:
+
+        if permanent_orbs is not None:
+            cv2.imwrite("orb_artwork.png", permanent_orbs)
+            print("Final artwork saved to orb_artwork.png")
 
         tracker.close()
 

@@ -144,22 +144,6 @@ class Synth:
         self.pad_notes = notes
         self.pad_level = level
 
-    def pluck(self, midi, vel):
-
-        self.pluck_midi = midi
-        self.pluck_level = vel
-
-
-    def drum(self, kind, vel):
-
-        if kind == "kick":
-            self.kick_level = vel
-
-        elif kind == "snare":
-            self.snare_level = vel
-
-        elif kind == "hat":
-            self.hat_level = vel
 
     def level(self):
 
